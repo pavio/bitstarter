@@ -20,10 +20,11 @@ References:
    - https://developer.mozilla.org/en-US/docs/JSON
    - https://developer.mozilla.org/en-US/docs/JSON#JSON_in_Firefox_2
 */
-
+var sys = require('sys');
 var fs = require('fs');
 var program = require('commander');
 var cheerio = require('cheerio');
+var rest = require('restler');
 var HTMLFILE_DEFAULT = "index.html";
 var CHECKSFILE_DEFAULT = "checks.json";
 
@@ -34,6 +35,23 @@ var assertFileExists = function(infile) {
         process.exit(1); // http://nodejs.org/api/process.html#process_process_exit_code
     }
     return instr;
+};
+
+var processURL = function(url,checks) {
+    var output; 
+    rest.get(url).on('complete',function(data,response) {
+	if (response.statusCode != 200) {
+	    console.log("%s does not exist. Exiting.", url);
+	    process.exit(1);
+	}
+//	sys.puts(data);
+        var checkJson = checkURL(data, checks);
+        var outJson = JSON.stringify(checkJson, null, 4);
+	console.log(outJson);
+	//console.log(response);
+	//return response;
+    });
+    //return output;
 };
 
 var cheerioHtmlFile = function(htmlfile) {
@@ -55,6 +73,17 @@ var checkHtmlFile = function(htmlfile, checksfile) {
     return out;
 };
 
+var checkURL = function(urlcontents, checksfile) {
+    $ = cheerio.load(urlcontents);
+    var checks = loadChecks(checksfile).sort();
+    var out = {};
+    for(var ii in checks) {
+        var present = $(checks[ii]).length > 0;
+        out[checks[ii]] = present;
+    }
+    return out;
+};
+
 var clone = function(fn) {
     // Workaround for commander.js issue.
     // http://stackoverflow.com/a/6772648
@@ -65,10 +94,19 @@ if(require.main == module) {
     program
         .option('-c, --checks <check_file>', 'Path to checks.json', clone(assertFileExists), CHECKSFILE_DEFAULT)
         .option('-f, --file <html_file>', 'Path to index.html', clone(assertFileExists), HTMLFILE_DEFAULT)
-        .parse(process.argv);
-    var checkJson = checkHtmlFile(program.file, program.checks);
-    var outJson = JSON.stringify(checkJson, null, 4);
-    console.log(outJson);
+	.option('-u, --url <url>', 'URL to index.html')
+	.parse(process.argv);
+    if (program.url) {
+//	console.log("URL: ",program.url);
+	//var url = rest.get(program.url).on('complete', assertURLExists);
+	var urlcontents = processURL(program.url,program.checks);
+	//console.log("URL Contents: ",urlcontents);
+	//var checkJSON = checkURL(urlcontents, program.checks);
+    } else {
+	var checkJson = checkHtmlFile(program.file, program.checks);
+	var outJson = JSON.stringify(checkJson, null, 4);
+	console.log(outJson);
+    }
 } else {
     exports.checkHtmlFile = checkHtmlFile;
 }
